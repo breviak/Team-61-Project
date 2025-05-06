@@ -18,8 +18,59 @@ RTC_DS1307 rtc;
 Servo lockServo;
 const int servoPin = 9;
 
+// === Keypad Setup ===
+const int keypadPin = A0;
 
+// === Password Setup ===
+const int passwordLength = 4;
+String inputBuffer = "";
+String password = "";
+bool isChangingPassword = false;
 
+// === Debounce Control ===
+char lastKey = '\0';
+unsigned long lastDebounceTime = 0;
+const unsigned long debounceDelay = 200;
+
+// === EEPROM Functions ===
+String readPasswordFromEEPROM() {
+  String pwd = "";
+  for (int i = 0; i < passwordLength; i++) {
+    char c = EEPROM.read(i);
+    if (c == 255 || c < 32 || c > 126) return ""; // invalid char check
+    pwd += c;
+  }
+  return pwd;
+}
+
+void savePasswordToEEPROM(const String& newPwd) {
+  for (int i = 0; i < passwordLength; i++) {
+    EEPROM.write(i, newPwd[i]);
+  }
+}
+
+  char getKey() {
+    int analogValue = analogRead(keypadPin);
+
+    if (analogValue <=  10) return '\0'; // No key pressed
+
+    if (analogValue < 671) return '1';
+    else if (analogValue < 661) return '2';
+    else if (analogValue < 649) return '3';
+    else if (analogValue < 641) return 'A';
+    else if (analogValue < 628) return '4';
+    else if (analogValue < 620) return '5';
+    else if (analogValue < 609) return '6';
+    else if (analogValue < 602) return 'B';
+    else if (analogValue < 591) return '7';
+    else if (analogValue < 582) return '8';
+    else if (analogValue < 574) return '9';
+    else if (analogValue < 568) return 'C';
+    else if (analogValue < 557) return '*';
+    else if (analogValue < 550) return '0';
+    else if (analogValue < 543) return '#';
+    else return 'D';
+  }
 
 //FOR BUZZER
 void buzzerSound () {
@@ -129,8 +180,8 @@ char daysOfTheWeek[7][12] = {
 };
 
 //EVENT FROM 
-DateTime EVENT_START(2025, APRIL, 12, 19, 32);
-DateTime EVENT_END(2025, APRIL, 12, 20, 31);
+DateTime EVENT_START(2025, APRIL, 30, 17, 10);
+DateTime EVENT_END(2025, APRIL, 30, 17, 12);
 
 void setup() {
   lcd.begin(16,2);
@@ -142,13 +193,14 @@ void setup() {
 
   // put your setup code here, to run once:
   //SETUP RTC MODULE
-  if (! rtc.begin()) {
+  if (!rtc.begin()) {
     lcd.print("Couldn't find RTC");
     Serial.println("Couldn't find RTC");
     while (1);
   }
-  else if(!rtc.begin()) {
+  else {
     lcd.print("Found rtc");
+    Serial.println("Found rtc");
   }
   //automatically sets the RTC to the date & time on PC this sketch was compiled
   rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
@@ -157,49 +209,135 @@ void setup() {
   // January 21, 2021 at 3a, you would call:
   //rtc.adjust(DateTime(2021, 1, 21, 3, 0, 0));
   Serial.begin(9600);
-
 }
 
 
 void loop() {
-  // put your main code here, to run repeatedly:
-  DateTime now = rtc.now();
-  
-  //Serial.println(analogRead(A0));
+  char key = getKey();
+  int analogValue = analogRead(keypadPin);
+  lockServo.write(90);
+  if (analogValue <= 10) {
+    // put your main code here, to run repeatedly:
+    DateTime now = rtc.now();
+      
+    //Serial.println(analogRead(A0));
 
+    int year = now.year();
+    int month = now.month();
+    int day = now.day();
+    int hour = now.hour();
+    int minute = now.minute();
+    int second = now.second();
 
-  int year = now.year();
-  int month = now.month();
-  int day = now.day();
-  int hour = now.hour();
-  int minute = now.minute();
-  int second = now.second();
+    //lockServo.write(100);
+      
+    if (now.secondstime() >= EVENT_START.secondstime() && now.secondstime() < EVENT_END.secondstime()) {
+      lcd.print("Time to Refill");
+      buzzerSound();
 
-  lockServo.write(100);
-  
-  if (now.secondstime() >= EVENT_START.secondstime() && now.secondstime() < EVENT_END.secondstime()) {
-    lcd.print("Time to Refill");
-    buzzerSound();
+    }
+    else {
+      lcd.clear();
+      lcd.setCursor(0,0); //Start to print at the first ro
+      lcd.print("Date: ");
+      lcd.print(year);
+      lcd.print("/");
+      lcd.print(month);
+      lcd.print("/");
+      lcd.print(day);
+        
+      lcd.setCursor(0,1); //Start to print at the second row
+      lcd.print("Time: ");
+      lcd.print(hour);
+      lcd.print(":");
+      lcd.print(minute);
+      lcd.print(":");
+      lcd.print(second);
+        
+      delay(1000); // delay 1 seconds TO update every second
+      }
 
+    
   }
+  key = getKey();
+    Serial.println("  Analog Value: ");
+    Serial.println(analogRead(keypadPin));
+    Serial.println("  key:");
+    Serial.println(key);
+  
+
+  //KEYPAD & SERVO
+  /*
   else {
     lcd.clear();
-    lcd.setCursor(0,0); //Start to print at the first ro
-    lcd.print("Date: ");
-    lcd.print(year);
-    lcd.print("/");
-    lcd.print(month);
-    lcd.print("/");
-    lcd.print(day);
-    
-    lcd.setCursor(0,1); //Start to print at the second row
-    lcd.print("Time: ");
-    lcd.print(hour);
-    lcd.print(":");
-    lcd.print(minute);
-    lcd.print(":");
-    lcd.print(second);
-    
-    delay(1000); // delay 1 seconds TO update every second
+    lcd.print("Enter Password");
+    Serial.println("Enter Password");
   }
+*/
+
+/*
+    if (key != '\0' && key != lastKey && millis() - lastDebounceTime > debounceDelay) {
+      lastDebounceTime = millis();
+      lastKey = key;
+
+      inputBuffer += key;
+      lcd.setCursor(0, 1);
+      lcd.print(inputBuffer);
+
+      // Handle password change command
+      if (inputBuffer.endsWith("*0#") && !isChangingPassword) {
+        isChangingPassword = true;
+        inputBuffer = "";
+        lcd.clear();
+        lcd.print("New Password:");
+        return;
+    }
+
+    // Handle setting new password
+    if (isChangingPassword && inputBuffer.length() >= passwordLength) {
+      password = inputBuffer;
+      savePasswordToEEPROM(password);
+      isChangingPassword = false;
+      inputBuffer = "";
+
+
+      lcd.clear();
+      lcd.print("Password Changed");
+      delay(2000);
+      lcd.clear();
+      lcd.print("Enter Password:");
+      return;
+    }
+  }
+
+  // Handle normal password check
+  if (!isChangingPassword && inputBuffer.length() >= passwordLength) {
+    lcd.clear();
+    if (inputBuffer == password) {
+      lcd.print("Access Granted");
+      lockServo.write(90); // Unlock
+      delay(3000);
+      lockServo.write(0);  // Lock again
+    } 
+
+    else {
+      lcd.print("Access Denied");
+      delay(2000);
+    }
+
+    inputBuffer = "";
+    lcd.clear();
+    lcd.print("Enter Password:");
+  }
+  */
+  //KEYPAD
+  // === Analog Keypad Mapping ===
+  // You should calibrate these based on your resistor ladder
+  
 }
+
+  
+
+
+
+
